@@ -1,0 +1,4 @@
+Kidd: 8
+Marchialy: 8
+Anura: 5
+Cleo: 5

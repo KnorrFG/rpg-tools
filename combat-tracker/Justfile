@@ -1,0 +1,5 @@
+run:
+	cargo run -- pcs.txt bandits.txt
+	
+install:
+	cargo build --release && cp target/release/combat-tracker $HOME/.local/bin

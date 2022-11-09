@@ -1,0 +1,4 @@
+Bandit 1: 2
+Bandit 2: 2
+Bandit 3: 2
+Bandit 4: 2
