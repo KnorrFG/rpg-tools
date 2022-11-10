@@ -112,6 +112,37 @@ impl Normal {
             ..self
         }
     }
+
+    pub fn move_selected_down(self) -> Normal {
+        let a = self.list_state.selected().unwrap();
+        self.increment_selection().swap_current_selection_with(a)
+    }
+
+    pub fn move_selected_up(self) -> Normal {
+        let a = self.list_state.selected().unwrap();
+        self.decrement_selection().swap_current_selection_with(a)
+    }
+
+    fn swap_current_selection_with(self, swap_pos: usize) -> Normal {
+        let Normal {
+            mut participants,
+            list_state,
+        } = self;
+        let current_selection = list_state.selected().unwrap();
+        participants.swap(current_selection, swap_pos);
+
+        // swap inis so inis and position match. Because we would need two mutable
+        // references into the same vec this does not work without unsafe, and the
+        // creation of two pointers, so i prefer this
+        let tmp = participants[current_selection].initiative;
+        participants[current_selection].initiative = participants[swap_pos].initiative;
+        participants[swap_pos].initiative = tmp;
+
+        Normal {
+            participants,
+            list_state,
+        }
+    }
 }
 
 impl State for Normal {
@@ -120,6 +151,8 @@ impl State for Normal {
             match key.code {
                 KeyCode::Char('j') => Ok(self.increment_selection().boxed()),
                 KeyCode::Char('k') => Ok(self.decrement_selection().boxed()),
+                KeyCode::Char('J') => Ok(self.move_selected_down().boxed()),
+                KeyCode::Char('K') => Ok(self.move_selected_up().boxed()),
                 KeyCode::Char('c') => self.change_selection(),
                 KeyCode::Char('d') => Ok(self.delete_selection()?.boxed()),
                 KeyCode::Char('r') => Ok(self.roll_initiatives().boxed()),
