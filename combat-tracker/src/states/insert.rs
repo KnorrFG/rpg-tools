@@ -2,36 +2,65 @@ use std::iter;
 
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode};
+use persistent_structs::PersistentStruct;
 use tui::{
     text::Span,
     widgets::{Block, Borders, List, Paragraph},
 };
 
-use crate::{states, view_utils as vu, Boxable, CombatParticipant, Frame, State, StateBox};
+use crate::{
+    combat_state::{CombatState, Participant},
+    states::{self, Boxable, State, StateBox},
+    utils, view_utils as vu, Frame,
+};
 
-#[derive(Clone)]
+#[derive(Clone, Default, PersistentStruct)]
 pub struct Insert {
-    pub participants: Vec<CombatParticipant>,
+    pub combat_state: CombatState,
     pub input_buffer: String,
+    pub initiatives: Vec<Option<u8>>,
 }
 
 impl Insert {
-    pub fn with_char_push(&self, c: char) -> Box<Self> {
-        let mut input_buffer = self.input_buffer.clone();
-        input_buffer.push(c);
-        Box::new(Insert {
-            participants: self.participants.clone(),
+    pub fn new(
+        combat_state: CombatState,
+        input_buffer: String,
+        initiatives: impl IntoIterator<Item = Option<u8>>,
+    ) -> Insert {
+        Insert {
+            combat_state,
             input_buffer,
+            initiatives: Vec::from_iter(initiatives),
+        }
+    }
+    pub fn with_char_push(self, c: char) -> StateBox {
+        self.update_input_buffer(|mut b| {
+            b.push(c);
+            b
         })
+        .boxed()
     }
 
-    pub fn with_char_pop(&self) -> Box<Self> {
-        let mut input_buffer = self.input_buffer.clone();
-        input_buffer.pop();
-        Box::new(Insert {
-            participants: self.participants.clone(),
-            input_buffer,
+    pub fn with_char_pop(self) -> StateBox {
+        self.update_input_buffer(|mut b| {
+            b.pop();
+            b
         })
+        .boxed()
+    }
+
+    pub fn with_new_participant(self, p: Participant, ini: Option<u8>) -> StateBox {
+        self.update_combat_state(|cs| {
+            cs.update_participants(|mut ps| {
+                ps.push(p);
+                ps
+            })
+        })
+        .update_initiatives(|mut is| {
+            is.push(ini);
+            is
+        })
+        .boxed()
     }
 }
 
@@ -41,25 +70,13 @@ impl State for Insert {
             match key.code {
                 KeyCode::Char(c) => Ok(self.with_char_push(c)),
                 KeyCode::Backspace => Ok(self.with_char_pop()),
-                KeyCode::Esc if self.participants.len() > 0 => {
-                    Ok(states::Normal::new(self.participants).boxed())
+                KeyCode::Esc if self.combat_state.participants.len() > 0 => {
+                    Ok(states::Normal::new(self.combat_state, self.initiatives)?.boxed())
                 }
-                KeyCode::Enter => match CombatParticipant::parse(&self.input_buffer) {
-                    Ok(participant) => Ok(Insert {
-                        participants: self
-                            .participants
-                            .into_iter()
-                            .chain(iter::once(participant))
-                            .collect(),
-                        input_buffer: "".to_string(),
-                    }
-                    .boxed()),
-                    Err(error) => Ok(states::Msg {
-                        parent: self.clone().boxed(),
-                        msg: format!("{:?}", error),
-                    }
-                    .boxed()),
-                },
+                KeyCode::Enter => {
+                    let (ini, p) = utils::parse_participant_with_ini(&self.input_buffer)?;
+                    Ok(self.with_new_participant(p, ini))
+                }
                 _ => Ok(self),
             }
         } else {
@@ -75,7 +92,8 @@ impl State for Insert {
 
         vu::render_input_block(f, "New Participant", &self.input_buffer, chunks[1]);
 
-        let list_lines = vu::participants_list_items(&self.participants);
+        let list_lines =
+            vu::participants_list_items(&self.combat_state.participants, &self.initiatives);
 
         let list =
             List::new(list_lines).block(Block::default().borders(Borders::ALL).title("Messages"));

@@ -3,7 +3,7 @@ use tui::{
     widgets::{Block, Borders, ListItem, Paragraph},
 };
 
-use crate::{CombatParticipant, Frame};
+use crate::{combat_state::Participant, Frame};
 
 pub fn input_layout(r: Rect) -> Vec<Rect> {
     Layout::default()
@@ -41,15 +41,19 @@ pub fn render_input_block(f: &mut Frame, title: &str, buffer: &str, chunk: Rect)
     f.set_cursor(chunk.x + buffer.len() as u16 + 1, chunk.y + 1);
 }
 
-pub fn participants_list_items(participants: &Vec<CombatParticipant>) -> Vec<ListItem> {
+pub fn participants_list_items(
+    participants: &Vec<Participant>,
+    inis: &Vec<Option<u8>>,
+) -> Vec<ListItem<'static>> {
     participants
         .iter()
-        .map(|p| {
+        .zip(inis)
+        .map(|(p, ini)| {
             ListItem::new(format!(
                 "{} - HP: {};{}",
                 p.name,
                 p.hp,
-                if let Some(ini) = p.initiative {
+                if let Some(ini) = ini {
                     format!(" Ini: {}", ini)
                 } else {
                     "".to_string()

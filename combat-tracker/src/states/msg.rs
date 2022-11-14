@@ -5,7 +5,8 @@ use tui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use crate::{Frame, State, StateBox};
+use super::State;
+use crate::{Frame, StateBox};
 
 #[derive(Clone)]
 pub struct Msg {
