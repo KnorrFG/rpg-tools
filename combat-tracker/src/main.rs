@@ -1,11 +1,11 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use argh::FromArgs;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use rand::Rng;
+
 use std::{fs, io, path::PathBuf};
 use tui::{backend::CrosstermBackend, Terminal};
 // use unicode_width::UnicodeWidthStr;

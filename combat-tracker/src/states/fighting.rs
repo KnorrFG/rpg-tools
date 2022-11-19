@@ -1,17 +1,18 @@
 use anyhow::Result;
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::{Event, KeyCode, KeyModifiers};
 use lazy_static::lazy_static;
 use pad::PadStr;
-use std::{cmp::min, collections::HashMap, iter::IntoIterator, rc::Rc};
+use persistent_structs::PersistentStruct;
+use std::{collections::HashMap, rc::Rc};
 use tui::{
-    layout::{Alignment, Constraint},
+    layout::Constraint,
     style::{Modifier, Style},
     text::Span,
-    widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table, TableState},
+    widgets::{Block, Borders, Paragraph, Row, Table, TableState},
 };
 
 use crate::{
-    combat_state::{CombatState, Participant},
+    combat_state::{CombatState, Participant, SubRoundTime, TimeVec},
     states::{self, Boxable, State, StateBox},
     utils, view_utils as vu, Frame,
 };
@@ -20,11 +21,10 @@ lazy_static! {
     static ref KEY_INFOS: Vec<KeyInfo> = to_key_infos("qwaszxerdfcvtyghbnuijkm,opl;./");
 }
 
-#[derive(Clone)]
+#[derive(Clone, PersistentStruct)]
 pub struct Fighting {
     combat_state: Rc<CombatState>,
     key_map: Rc<HashMap<char, CallbackBox>>,
-    table_state: TableState,
     key_infos: Vec<KeyInfo>,
 }
 
@@ -89,7 +89,6 @@ impl Fighting {
         Fighting {
             combat_state: combat_state.clone(),
             key_map: Rc::new(HashMap::from_iter(key_map_iter)),
-            table_state: TableState::default(),
             key_infos,
         }
     }
@@ -116,6 +115,9 @@ impl State for Fighting {
                 KeyCode::Esc => {
                     Ok(states::Normal::from_combat_state((*self.combat_state).clone())?.boxed())
                 }
+                KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => Ok(self
+                    .update_combat_state(|cs| Rc::new((*cs).clone().with_next_turn()))
+                    .boxed()),
                 KeyCode::Char(c) => {
                     if let Some(f) = self.key_map.get(&c) {
                         let new_cs = f();
@@ -133,7 +135,10 @@ impl State for Fighting {
 
     fn render(&mut self, f: &mut Frame) {
         let chunks = vu::select_layout(f.size());
-        let info_text = Span::from("Fight - Esc: To normal");
+        let info_text = Span::from(format!(
+            "Fight - Esc: To normal; Current Round: {}",
+            self.combat_state.current_round
+        ));
         f.render_widget(Paragraph::new(info_text), chunks[0]);
 
         let name_col_length = self
@@ -172,6 +177,8 @@ impl State for Fighting {
             .highlight_style(Style::default().add_modifier(Modifier::BOLD))
             // ...and potentially show a symbol in front of the selection.
             .highlight_symbol(">>");
-        f.render_stateful_widget(table, chunks[2], &mut self.table_state);
+        let mut table_state = TableState::default();
+        table_state.select(Some(self.combat_state.current_idx));
+        f.render_stateful_widget(table, chunks[2], &mut table_state);
     }
 }

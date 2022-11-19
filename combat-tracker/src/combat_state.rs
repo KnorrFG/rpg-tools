@@ -1,20 +1,23 @@
 use anyhow::{ensure, Context, Result};
+use derive_new::new;
 use persistent_structs::PersistentStruct;
 use std::fmt;
 
+pub type SubRoundTime = (usize, usize);
+
 use crate::utils;
 
-#[derive(PersistentStruct, Default, Clone)]
+#[derive(PersistentStruct, Default, Clone, new)]
 pub struct CombatState {
-    pub now: TimeVec,
+    pub current_round: usize,
+    pub current_idx: usize,
     pub participants: Vec<Participant>,
 }
 
-#[derive(PersistentStruct, Clone, Copy, Default)]
+#[derive(PersistentStruct, Clone, Copy, Default, PartialEq, Eq, PartialOrd)]
 pub struct TimeVec {
-    pub round: u8,
-    pub in_round_pos: u8,
-    pub round_len: usize,
+    pub round: usize,
+    pub sub_round_time: SubRoundTime,
 }
 
 #[derive(PersistentStruct, Clone)]
@@ -31,11 +34,49 @@ pub struct Modifier {
     pub duration: TimeVec,
 }
 
+impl TimeVec {
+    pub fn new(round: usize, sr_nom: usize, sr_denom: usize) -> TimeVec {
+        TimeVec {
+            round,
+            sub_round_time: (sr_nom, sr_denom),
+        }
+    }
+
+    pub fn with_next_turn(self) -> TimeVec {
+        let TimeVec {
+            round,
+            sub_round_time: (nom, denom),
+        } = self;
+        assert!(denom > 0);
+        if nom == denom - 1 {
+            TimeVec::new(round + 1, 0, denom)
+        } else {
+            TimeVec::new(round, nom + 1, denom)
+        }
+    }
+}
+
 impl CombatState {
+    pub fn now(&self) -> TimeVec {
+        TimeVec {
+            round: self.current_round,
+            sub_round_time: (self.current_idx, self.participants.len()),
+        }
+    }
+
+    pub fn with_next_turn(self) -> CombatState {
+        if self.current_idx == self.participants.len() - 1 {
+            self.update_current_round(|r| r + 1).with_current_idx(0)
+        } else {
+            self.update_current_idx(|i| i + 1)
+        }
+    }
+
     pub fn from_participants(participants: Vec<Participant>) -> CombatState {
         CombatState {
             participants,
-            now: TimeVec::default(),
+            current_idx: 0,
+            current_round: 0,
         }
     }
     pub fn with_nth_participant_popped(self, n: usize) -> (Self, Participant) {
@@ -43,7 +84,7 @@ impl CombatState {
         (
             CombatState {
                 participants,
-                now: self.now,
+                ..self
             },
             res,
         )

@@ -19,6 +19,7 @@ pub fn with_popped_n<T>(mut xs: Vec<T>, n: usize) -> (T, Vec<T>) {
     let elem = xs.remove(n);
     (elem, xs)
 }
+
 pub fn roll(n: u8, dice: u8) -> u8 {
     let mut rng = rand::thread_rng();
     let dist = rand::distributions::Uniform::new_inclusive(1, dice);

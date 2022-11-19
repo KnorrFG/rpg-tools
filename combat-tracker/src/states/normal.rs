@@ -1,5 +1,5 @@
-use anyhow::{anyhow, ensure, Result};
-use crossterm::event::{Event, KeyCode, KeyModifiers};
+use anyhow::{ensure, Result};
+use crossterm::event::{Event, KeyCode};
 use persistent_structs::PersistentStruct;
 use tui::{
     style::{Modifier, Style},
@@ -8,7 +8,7 @@ use tui::{
 };
 
 use crate::{
-    combat_state::{CombatState, Participant},
+    combat_state::CombatState,
     states::{self, Boxable, State, StateBox},
     utils, view_utils as vu, Frame,
 };
@@ -17,7 +17,7 @@ use crate::{
 pub struct Normal {
     pub combat_state: CombatState,
     pub initiatives: Vec<Option<u8>>,
-    pub list_state: ListState,
+    pub current_selection: usize,
 }
 
 impl Normal {
@@ -26,35 +26,25 @@ impl Normal {
             combat_state.participants.len() > 0,
             "Normal mode can only be used with at least one participant"
         );
-        let mut list_state = ListState::default();
-        list_state.select(Some(0));
         Ok(Normal {
             combat_state,
             initiatives,
-            list_state,
+            current_selection: 0,
         })
     }
 
     fn increment_selection(self) -> Normal {
-        let len = self.combat_state.participants.len();
-        self.update_list_state(|mut ls| {
-            let idx = ls.selected().expect("List has no selection");
-            ls.select(Some((idx + 1) % len));
-            ls
-        })
+        let len = self.combat_state.participants.len() - 1;
+        self.update_current_selection(|s| if s == len { 0 } else { s + 1 })
     }
 
     fn decrement_selection(self) -> Normal {
-        let len = self.combat_state.participants.len();
-        self.update_list_state(|mut ls| {
-            let idx = ls.selected().expect("List has no selection");
-            ls.select(Some((idx + len - 1) % len));
-            ls
-        })
+        let len = self.combat_state.participants.len() - 1;
+        self.update_current_selection(|s| if s == 0 { len - 1 } else { s - 1 })
     }
 
     fn change_selection(self) -> StateBox {
-        let idx = self.list_state.selected().expect("No List selection");
+        let idx = self.current_selection;
         let (combat_state, editee) = self.combat_state.with_nth_participant_popped(idx);
         let (editee_ini, initiatives) = utils::with_popped_n(self.initiatives, idx);
 
@@ -75,8 +65,8 @@ impl Normal {
     }
 
     fn delete_selection(self) -> Normal {
-        let idx = self.list_state.selected().expect("No State Selected");
-        let mut res = self
+        let idx = self.current_selection;
+        let res = self
             .update_combat_state(|s| s.without_participant(idx))
             .update_initiatives(|mut is| {
                 is.remove(idx);
@@ -87,8 +77,7 @@ impl Normal {
         } else {
             idx
         };
-        res.list_state.select(Some(new_index));
-        res
+        res.with_current_selection(new_index)
     }
 
     pub fn from_combat_state(cs: CombatState) -> Result<Self> {
@@ -96,15 +85,8 @@ impl Normal {
             cs.participants.len() > 0,
             "Normal mode must always have at least one entry"
         );
-        let mut list_state = ListState::default();
-        list_state.select(Some(0));
-
         let initiatives = vec![None; cs.participants.len()];
-        Ok(Normal {
-            combat_state: cs,
-            initiatives,
-            list_state,
-        })
+        Normal::new(cs, initiatives)
     }
 
     pub fn roll_initiatives(self) -> Normal {
@@ -124,20 +106,20 @@ impl Normal {
     }
 
     pub fn move_selected_down(self) -> Normal {
-        let a = self.list_state.selected().unwrap();
+        let a = self.current_selection;
         self.increment_selection().swap_current_selection_with(a)
     }
 
     pub fn move_selected_up(self) -> Normal {
-        let a = self.list_state.selected().unwrap();
+        let a = self.current_selection;
         self.decrement_selection().swap_current_selection_with(a)
     }
 
     fn swap_current_selection_with(self, swap_pos: usize) -> Normal {
-        let current_selection = self.list_state.selected().unwrap();
+        let sel = self.current_selection;
         self.update_combat_state(|cs| {
             cs.update_participants(|mut ps| {
-                ps.swap(current_selection, swap_pos);
+                ps.swap(sel, swap_pos);
                 ps
             })
         })
@@ -182,6 +164,8 @@ impl State for Normal {
             .block(Block::default().borders(Borders::ALL).title("Messages"))
             .highlight_style(Style::default().add_modifier(Modifier::REVERSED));
 
-        f.render_stateful_widget(list, chunks[2], &mut self.list_state);
+        let mut list_state = ListState::default();
+        list_state.select(Some(self.current_selection));
+        f.render_stateful_widget(list, chunks[2], &mut list_state);
     }
 }

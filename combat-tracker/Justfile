@@ -3,3 +3,6 @@ run:
 	
 install:
 	cargo build --release && cp target/release/combat-tracker $HOME/.local/bin
+
+check:
+  cargo check --color always 2>&1 | less -r
