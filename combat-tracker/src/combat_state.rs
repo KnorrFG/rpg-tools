@@ -31,7 +31,7 @@ pub struct Participant {
 pub struct Modifier {
     pub name: String,
     pub introduced_at: TimeVec,
-    pub duration: TimeVec,
+    pub duration: usize,
 }
 
 impl TimeVec {

@@ -1,5 +1,3 @@
-
-
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode};
 use persistent_structs::PersistentStruct;
@@ -49,7 +47,7 @@ impl Insert {
         .boxed()
     }
 
-    pub fn with_new_participant(self, p: Participant, ini: Option<u8>) -> StateBox {
+    pub fn with_new_participant(self, p: Participant, ini: Option<u8>) -> Self {
         self.update_combat_state(|cs| {
             cs.update_participants(|mut ps| {
                 ps.push(p);
@@ -60,7 +58,6 @@ impl Insert {
             is.push(ini);
             is
         })
-        .boxed()
     }
 }
 
@@ -75,7 +72,10 @@ impl State for Insert {
                 }
                 KeyCode::Enter => {
                     let (ini, p) = utils::parse_participant_with_ini(&self.input_buffer)?;
-                    Ok(self.with_new_participant(p, ini))
+                    Ok(self
+                        .with_new_participant(p, ini)
+                        .with_input_buffer("".into())
+                        .boxed())
                 }
                 _ => Ok(self),
             }

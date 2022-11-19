@@ -18,7 +18,8 @@ use crate::{
 };
 
 lazy_static! {
-    static ref KEY_INFOS: Vec<KeyInfo> = to_key_infos("qwaszxerdfcvtyghbnuijkm,opl;./");
+    static ref KEY_INFOS: Vec<KeyInfo> =
+        to_key_infos("qweasdzxcrtyfghvbnuiojklm,.;p/QWEASDZXCRTYFGHVBNUIOJKLM<>P:?");
 }
 
 #[derive(Clone, PersistentStruct)]
@@ -34,6 +35,7 @@ pub type CallbackBox = Box<dyn Fn() -> CombatState>;
 pub struct KeyInfo {
     pub decrement: char,
     pub increment: char,
+    pub edit_modifiers: char,
 }
 
 impl Fighting {
@@ -97,12 +99,13 @@ impl Fighting {
 fn to_key_infos(s: &str) -> Vec<KeyInfo> {
     s.chars()
         .collect::<Vec<char>>()
-        .chunks(2)
+        .chunks(3)
         .map(|chunk| {
-            assert!(chunk.len() == 2);
+            assert!(chunk.len() == 3);
             KeyInfo {
                 decrement: chunk[0],
                 increment: chunk[1],
+                edit_modifiers: chunk[2],
             }
         })
         .collect()
