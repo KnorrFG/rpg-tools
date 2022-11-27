@@ -46,8 +46,5 @@ pub use msg::Msg;
 pub mod fighting;
 pub use fighting::Fighting;
 
-//pub mod editing_modifiers;
-//pub use editing_modifiers::EditingModifiers;
-
-//pub mod managing_modifiers;
-//pub use managing_modifiers::ManagingModifiers;
+pub mod adding_modifier;
+pub use adding_modifier::AddingModifiers;

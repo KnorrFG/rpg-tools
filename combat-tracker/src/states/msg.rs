@@ -1,5 +1,6 @@
 use anyhow::Result;
 use crossterm::event::{Event, KeyCode};
+use derive_new::new;
 use tui::{
     layout::Margin,
     widgets::{Block, Borders, Paragraph},
@@ -8,7 +9,7 @@ use tui::{
 use super::State;
 use crate::{Frame, StateBox};
 
-#[derive(Clone)]
+#[derive(Clone, new)]
 pub struct Msg {
     pub parent: StateBox,
     pub msg: String,

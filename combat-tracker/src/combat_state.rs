@@ -1,9 +1,7 @@
-use anyhow::{ensure, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use derive_new::new;
 use persistent_structs::PersistentStruct;
 use std::fmt;
-
-pub type SubRoundTime = (usize, usize);
 
 use crate::utils;
 
@@ -27,25 +25,49 @@ pub struct Participant {
     pub modifiers: Vec<Modifier>,
 }
 
-#[derive(PersistentStruct, Clone)]
+#[derive(PersistentStruct, Clone, new)]
 pub struct Modifier {
     pub name: String,
     pub introduced_at: TimeVec,
-    pub duration: usize,
+    pub duration: Option<usize>,
+}
+
+#[derive(Clone, Copy, new, Eq, Default)]
+pub struct SubRoundTime {
+    nom: usize,
+    denom: usize,
+}
+
+impl SubRoundTime {
+    pub fn as_float(&self) -> f64 {
+        self.nom as f64 / self.denom as f64
+    }
+}
+
+impl PartialEq for SubRoundTime {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_float() == other.as_float()
+    }
+}
+
+impl PartialOrd for SubRoundTime {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.as_float().partial_cmp(&other.as_float())
+    }
 }
 
 impl TimeVec {
     pub fn new(round: usize, sr_nom: usize, sr_denom: usize) -> TimeVec {
         TimeVec {
             round,
-            sub_round_time: (sr_nom, sr_denom),
+            sub_round_time: SubRoundTime::new(sr_nom, sr_denom),
         }
     }
 
     pub fn with_next_turn(self) -> TimeVec {
         let TimeVec {
             round,
-            sub_round_time: (nom, denom),
+            sub_round_time: SubRoundTime { nom, denom },
         } = self;
         assert!(denom > 0);
         if nom == denom - 1 {
@@ -60,16 +82,27 @@ impl CombatState {
     pub fn now(&self) -> TimeVec {
         TimeVec {
             round: self.current_round,
-            sub_round_time: (self.current_idx, self.participants.len()),
+            sub_round_time: SubRoundTime::new(self.current_idx, self.participants.len()),
         }
     }
 
     pub fn with_next_turn(self) -> CombatState {
-        if self.current_idx == self.participants.len() - 1 {
+        let mut next_state = if self.current_idx == self.participants.len() - 1 {
             self.update_current_round(|r| r + 1).with_current_idx(0)
         } else {
             self.update_current_idx(|i| i + 1)
+        };
+        let now = next_state.now();
+        for p in &mut next_state.participants {
+            p.modifiers.retain(|x| {
+                if let Some(dur) = x.remaining_rounds(&now) {
+                    dur > 0
+                } else {
+                    true
+                }
+            })
         }
+        next_state
     }
 
     pub fn from_participants(participants: Vec<Participant>) -> CombatState {
@@ -123,5 +156,49 @@ impl Participant {
 impl fmt::Display for Participant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.name, self.hp)
+    }
+}
+
+pub type ModifierFac = Box<dyn Fn(TimeVec) -> Modifier>;
+
+impl Modifier {
+    pub fn parse_factory(s: &str) -> Result<ModifierFac> {
+        let elems: Vec<&str> = s.split(":").collect();
+        ensure!(
+            elems.len() >= 1,
+            "Modifiers must have the following format: <Name>[:<Duration>]"
+        );
+        let name = elems[0].trim().to_string();
+        match elems.len() {
+            1 => Ok(Box::new(move |start| {
+                Modifier::new(name.clone(), start, None)
+            })),
+            2 => {
+                let dur: usize = elems[1]
+                    .trim()
+                    .parse()
+                    .context("Parsing Modifier Duration")?;
+                Ok(Box::new(move |start| {
+                    Modifier::new(name.clone(), start, Some(dur))
+                }))
+            }
+            _ => Err(anyhow!(
+                "Modifiers must have the following format: <Name>[:<Duration>]"
+            )),
+        }
+    }
+
+    pub fn remaining_rounds(&self, now: &TimeVec) -> Option<i64> {
+        if let Some(dur) = &self.duration {
+            let start = self.introduced_at;
+            let offset = if start.sub_round_time > now.sub_round_time {
+                0
+            } else {
+                -1
+            };
+            Some((start.round + dur) as i64 - now.round as i64 + offset + 1)
+        } else {
+            None
+        }
     }
 }

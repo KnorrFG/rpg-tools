@@ -1,5 +1,6 @@
 use crate::combat_state::Participant;
 use anyhow::{Context, Result};
+use crossterm::event::{Event, KeyCode};
 use rand::Rng;
 
 pub fn parse_participant_with_ini(s: &str) -> Result<(Option<u8>, Participant)> {
@@ -34,4 +35,21 @@ where
         xs[n] = f(x);
     }
     xs
+}
+
+pub fn update_buffer(mut buffer: String, key_code: KeyCode) -> String {
+    match key_code {
+        KeyCode::Char(c) => {
+            buffer.push(c);
+        }
+        KeyCode::Backspace => {
+            buffer.pop();
+        }
+        _ => {}
+    }
+    buffer
+}
+
+pub fn err_to_string(e: &anyhow::Error) -> String {
+    format!("{:?}", e)
 }
