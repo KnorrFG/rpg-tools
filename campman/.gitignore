@@ -1,0 +1,17 @@
+.stack-work/
+.vscode/
+haddock/
+dist-newstyle/
+dist-docs.*/
+*~
+*.aux
+*.hp
+*.prof
+*.ps
+*.ser
+cabal.project.local*
+
+
+# Added by cargo
+
+/target

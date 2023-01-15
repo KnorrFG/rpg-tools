@@ -9,7 +9,8 @@ use tui::{
 use crate::{
     combat_state::{CombatState, Participant},
     states::{self, Boxable, State, StateBox},
-    utils, view_utils as vu, Frame,
+    utils::{self, err_to_string},
+    view_utils as vu, Frame,
 };
 
 #[derive(Clone, Default, PersistentStruct)]
@@ -70,13 +71,13 @@ impl State for Insert {
                 KeyCode::Esc if self.combat_state.participants.len() > 0 => {
                     Ok(states::Normal::new(self.combat_state, self.initiatives)?.boxed())
                 }
-                KeyCode::Enter => {
-                    let (ini, p) = utils::parse_participant_with_ini(&self.input_buffer)?;
-                    Ok(self
+                KeyCode::Enter => match utils::parse_participant_with_ini(&self.input_buffer) {
+                    Ok((ini, p)) => Ok(self
                         .with_new_participant(p, ini)
                         .with_input_buffer("".into())
-                        .boxed())
-                }
+                        .boxed()),
+                    Err(e) => Ok(states::Msg::new(self, err_to_string(&e)).boxed()),
+                },
                 _ => Ok(self),
             }
         } else {
