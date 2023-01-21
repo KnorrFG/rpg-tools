@@ -18,6 +18,8 @@ use gen_npc_tab::{GenNpcMessage, GenNpcTab};
 mod view_npc_tab;
 use view_npc_tab::{ViewNpcMessage, ViewNpcTab};
 
+mod iced_utils;
+
 static CONFIG_PATH: OnceCell<PathBuf> = OnceCell::new();
 
 fn main() -> Result<()> {

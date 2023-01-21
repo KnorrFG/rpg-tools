@@ -6,18 +6,18 @@ use std::rc::Rc;
 use anyhow::{anyhow, Context, Result};
 use derive_new::new;
 use iced::alignment::Horizontal;
+use iced::theme::Button as ButtonTheme;
 use iced::widget::{column, row, Button, Column, Container, Row, Space, Text};
-use iced::{Element, Length};
+use iced::{Alignment, Color, Element, Length};
 use iced_aw::TabLabel;
 use itertools::Itertools;
 use rand::seq::IteratorRandom;
 use toml::Value;
 
 use super::{Message, Tab};
-
-mod npc_builder;
 use macros::try_as;
-use npc_builder::{load_blueprints_from_table, NpcBlueprint, NpcBuilder};
+mod npc_builder;
+use npc_builder::{load_blueprints_from_table, NpcBlueprint, NpcBuilder, StringMap};
 
 /// enables creation of a new state by moving components of the old state.
 /// first swaps the old state with a placeholder, then creates the new state
@@ -49,6 +49,7 @@ enum State {
     Error(String),
     Initiated(Box<Blueprints>),
     Building(Box<Blueprints>, NpcBuilder, BuildingData),
+    Finalizing(Box<Blueprints>, StringMap),
 }
 
 #[derive(Debug, new)]
@@ -84,6 +85,12 @@ impl GenNpcTab {
     }
 
     pub fn update(&mut self, message: GenNpcMessage) {
+        if let Err(e) = self.inner_update(message) {
+            self.state = State::Error(format!("{}", e))
+        }
+    }
+
+    pub fn inner_update(&mut self, message: GenNpcMessage) -> Result<()> {
         use GenNpcMessage::*;
         match message {
             ReInit => *self = Self::new(),
@@ -98,9 +105,35 @@ impl GenNpcTab {
                     State::Building(bps, builder, bd)
                 }
             },
-            AttribSelected(_) => todo!(),
+            AttribSelected(s) => with_state! {&mut self.state,
+                State::Building(blueprints, mut builder, mut bd) => {
+                    let toggled = !bd.displayed_options.get(&s).unwrap();
+                    bd.displayed_options.insert(s, toggled);
+                    if bd.displayed_options.values().map(|x| if *x {1} else {0}).sum::<usize>() == bd.n {
+                        let selections = bd.displayed_options
+                            .into_iter()
+                            .filter_map(|(name, selected)| if selected {Some(name)} else {None});
+                            if let Some(npc) = builder.set_current_field_val(selections.collect())? {
+                                State::Finalizing(blueprints, npc)
+                            } else {
+                                new_building_state(blueprints, builder)
+                            }
+                        } else {
+                            State::Building(blueprints, builder, bd)
+                        }
+                }
+            },
         }
+        Ok(())
     }
+}
+
+fn new_building_state(bps: Box<Blueprints>, builder: NpcBuilder) -> State {
+    let (field_name, opts, n) = builder.current_field_infos().unwrap();
+    let rolled_options = roll_options(&opts, n);
+    let displayed_opts = HashMap::from_iter(rolled_options);
+    let bd = BuildingData::new(opts, displayed_opts, n, field_name);
+    State::Building(bps, builder, bd)
 }
 
 fn roll_options(xs: &Vec<String>, n: usize) -> HashMap<String, bool> {
@@ -122,11 +155,61 @@ impl Tab for GenNpcTab {
     fn content(&self) -> Element<'_, Self::Message> {
         match &self.state {
             State::Error(e) => render_error(e),
+            State::Finalizing(blueprints, npc) => render_finalizing(&npc),
             State::Initiated(blueprints) => render_initiated_screen(blueprints),
             State::Building(blueprints, builder, builder_data) => {
                 render_building(blueprints, builder, builder_data).map(Message::GenNpcMsg)
             }
         }
+    }
+}
+
+fn render_finalizing(npc: &StringMap) -> Element<'_, Message> {
+    let col = Column::with_children(vec![render_npc(npc)]);
+    col.push(
+        row!(
+            h_space(1),
+            text_button("Add Tag", None).width(Length::FillPortion(1)),
+            text_button("Add Description", None).width(Length::FillPortion(1)),
+            h_space(1)
+        )
+        .spacing(10),
+    )
+    .spacing(10)
+    .align_items(Alignment::Center)
+    .into()
+}
+
+fn render_npc<'a, Message: 'a>(npc: &'a StringMap) -> Element<'a, Message> {
+    Column::with_children(
+        npc.iter()
+            .map(|(key, vals)| {
+                row!(
+                    Text::new(format!("{}:", key.replace("-", " ").replace("_", " ")))
+                        .size(24)
+                        .width(Length::FillPortion(1))
+                        .horizontal_alignment(Horizontal::Right),
+                    Text::new(vals.join("\n"))
+                        .size(24)
+                        .width(Length::FillPortion(1))
+                )
+                .spacing(10)
+                .into()
+            })
+            .collect(),
+    )
+    .into()
+}
+
+fn text_button<'a, Message>(
+    s: impl Into<Cow<'a, str>>,
+    msg: Option<Message>,
+) -> Button<'a, Message> {
+    let b = Button::new(Text::new(s).horizontal_alignment(Horizontal::Center));
+    if let Some(msg) = msg {
+        b.on_press(msg)
+    } else {
+        b
     }
 }
 
@@ -173,7 +256,6 @@ fn render_building<'a>(
 ) -> Element<'a, GenNpcMessage> {
     // theoretically, iced_lazy::responsive can be used to create a widget that knows its size,
     // but that doesn't compile currently, so this is a workaround for now
-    println!("{:?}", bd);
 
     column!(
         centered_text(format!("Choose {} options for {}", bd.n, bd.field_name)).size(24),
@@ -186,10 +268,15 @@ fn render_building<'a>(
                             .dropping(idx * 3)
                             .take(3)
                             .map(|(name, selected)| {
-                                Button::new(centered_text(name))
+                                let b = Button::new(centered_text(name))
                                     .on_press(GenNpcMessage::AttribSelected(name.clone()))
-                                    .width(Length::Fill)
-                                    .into()
+                                    .width(Length::Fill);
+                                if *selected {
+                                    b.style(ButtonTheme::Positive)
+                                } else {
+                                    b
+                                }
+                                .into()
                             })
                             .collect(),
                     )
@@ -217,7 +304,7 @@ fn centered_text<'a>(s: impl Into<Cow<'a, str>>) -> Text<'a> {
         .horizontal_alignment(Horizontal::Center)
 }
 
-fn render_error(err: &str) -> Element<'_, Message> {
+fn render_error(err: &str) -> Element<'static, Message> {
     let content: Element<'_, GenNpcMessage> = column!(
         Text::new(format!("An error Occured:\n{}", err)),
         Button::new("Try Again")
