@@ -9,6 +9,8 @@ use iced::{
 };
 use iced_aw::{style::TabBarStyles, TabLabel, Tabs};
 
+use database as db;
+
 const HEADER_SIZE: u16 = 32;
 const TAB_PADDING: u16 = 16;
 
@@ -21,6 +23,7 @@ use view_npc_tab::{ViewNpcMessage, ViewNpcTab};
 mod iced_utils;
 
 static CONFIG_PATH: OnceCell<PathBuf> = OnceCell::new();
+static DATA_DIR: OnceCell<PathBuf> = OnceCell::new();
 
 fn main() -> Result<()> {
     init()?;
@@ -100,6 +103,7 @@ fn init() -> Result<()> {
                 .join("campman/config.toml"),
         )
         .map_err(|_| anyhow!("init was called twice"))?;
+    DATA_DIR.set(dirs::data_dir().unwrap()).unwrap();
     Ok(())
 }
 

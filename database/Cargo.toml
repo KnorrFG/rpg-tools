@@ -1,0 +1,15 @@
+[package]
+name = "database"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fn_utils = { path = "../fn_utils" }
+
+anyhow = "1.0.68"
+rusqlite = { version = "0.28.0", features = ["bundled"] }
+rusqlite_migration = "1.0.1"
+serde = { version = "1.0.152", features = ["derive"] }
+serde_rusqlite = "0.31.0"
